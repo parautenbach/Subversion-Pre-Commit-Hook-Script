@@ -13,7 +13,7 @@ The need for many of the features of this script becomes redundant if you have a
 * Check that a software copyright notice has been included in all source code files, excluding auto generated code.
 * Prevent temporary project files from being committed.
 * Prevent binary files created by the project from being committed to a trunk or branch. Such files generate noise unless you're making a release and should be stored in an artifact repository in case of a release.
-* Prevent dependencies (such as libraries or tools) from being committed to a trunk or branch. When this script was originally created, package managers weren't the norm and hence a cheap imitation using `svn:externals` properties were used to pull dependencies during checkout into a lib directory. A second check that works in conjunction with this is to check that the lib directory is empty. 
+* Prevent dependencies (such as libraries or tools) from being committed to a trunk or branch. When this script was created, package managers weren't the norm and hence a cheap but effective imitation using `svn:externals` properties were used to pull dependencies during checkout into a `lib` directory. A second check that works in conjunction with this is to check that the `lib` directory is empty. 
 * Ensure that tags have a proper version number. The assumption here is that a 4 part version number and release indicator gets used (e.g. 1.0.0.0-final). This can be customised in many ways. As a second check, it will also abort if any `svn:externals` properties contain references to dependencies that are not final releases. 
 
 Please fork to taste! 
