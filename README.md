@@ -1,4 +1,4 @@
-Subversion-Pre-Commit-Hook-Script
+Subversion pre-commit Hook Script
 =================================
 
 A general purpose pre-commit server-side hook script for Subversion (SVN) intended to keep your repository clean, organised and consistent. This is a shell script and will work on *nix-based systems. Although this script was created with Subversion in mind, it can be adapted to work with git, mercurial or other VCSs. 
