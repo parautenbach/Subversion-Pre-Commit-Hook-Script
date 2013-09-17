@@ -1,0 +1,130 @@
+#!/bin/sh
+# Copyright 2013 Pieter Rautenbach
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#   http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+REPO="$1"
+REV="$2"
+
+ERROR=0
+SVNLOOK=/usr/bin/svnlook
+AWK=/bin/awk
+GREP=/bin/grep
+EGREP=/bin/egrep
+WC=/usr/bin/wc
+
+# make sure that the log message contains some text
+$SVNLOOK log -t "$REV" "$REPO" | grep ".\{3,\}" > /dev/null || ERROR=1
+if [ $ERROR -eq 1 ]
+then
+  echo "Please enter a log message or issue number." 1>&2
+  exit 1
+fi
+
+# check that everything to the left of trunk, tags and branches (inclusive) is lower case
+ERROR=`$SVNLOOK changed $REPO -t $REV |$EGREP "^A[\s]+/([a-z0-9_]+)/(trunk|tags|branches)/.*$" |$WC -l`
+
+# prevent creation of projects (folders to the left of trunk etc.)
+
+# make sure the relevant files contain a copyright notice
+COPYRIGHT='Software Copyright Notice'
+IFS=$'\n'
+for FILE in $($SVNLOOK changed $REPO -t $REV |$AWK -F '   ' '{IGNORECASE = 1; if (($1 ~ /^A|U/) && ($2 ~ /\.(c|h|cc|cpp|hpp|cs|java|javah|html|htm|sgml|aspx|asp|asax|sql|bat|sh|py|erl|herl|m|xaml|js|css|php|ascx)$/) && !($2 ~ /^dev\/third-party/) && !($2 ~ /.designer./) && !($2 ~ /Reference.cs$/) && !($2 ~ /AssemblyInfo.cs$/) && !($2 ~ /Global.asax$/)) print $2};');
+  do
+  $SVNLOOK cat -t "$REV" "$REPO" "$FILE" | $GREP -m 1 "$COPYRIGHT" > /dev/null || ERROR=1;
+  if [ $ERROR -eq 1 ]
+  then
+    echo "Please add a valid copyright notice to the file: $FILE" 1>&2
+    exit 1
+  fi
+done
+
+# no binaries allowed on trunk or branches
+ERROR=`$SVNLOOK changed $REPO -t $REV |$EGREP -i "^A.+/(trunk|branches)/(.+/)*(bin|obj|build|Debug|Release)/(.*)?$" |$WC -l`
+if [ $ERROR -ne 0 ]
+then
+  echo "No compiler binary or build directories allowed on trunk or branches." 1>&2
+  exit 1
+fi
+ERROR=`$SVNLOOK changed $REPO -t $REV |$EGREP -i "^A.+/(trunk|branches)/(.+/)*.*(\.o|\.so|\.jar|\.ear|\.class|\.dll|\.pdb|\.baml|\.xap|\.msi|\.exe|\.apk)$" |$WC -l`
+if [ $ERROR -ne 0 ]
+then
+  echo "No compiled binaries allowed on trunk or branches." 1>&2
+  exit 1
+fi
+
+# don't allow temp files or binaries
+# \.settings/
+ERROR=`$SVNLOOK changed $REPO -t $REV |$EGREP -i "^A.+/(trunk|branches)/(.+/)*.*(\.user|\.suo|Thumbs.db)$" |$WC -l`
+if [ $ERROR -ne 0 ]
+then
+  echo "No temporary or user files allowed." 1>&2
+  exit 1
+fi
+
+# prevent lib directory contents -- except third-party
+# build/lib check should be removed: it's a temporary solution for the way
+# the services teams' tag script works
+ERROR=`$SVNLOOK changed $REPO -t $REV |$EGREP -i "^A.+/lib/.+$" |$EGREP -v "^A.+/tags/.+/build/.+/lib/.+$" |$EGREP -v "^A.+dev/third-party/.+/lib/.+$" |$WC -l`
+if [ $ERROR -ne 0 ]
+then
+  echo "Libraries must be set via the svn:externals property." 1>&2
+  exit 1
+fi
+
+# check tags
+ERROR=`$SVNLOOK changed $REPO -t $REV |$EGREP -i "^A.+/tags/.+$" |$WC -l`
+if [ $ERROR -ne 0 ]
+then
+  # check for valid tag name format and match the project in the tag name to the parent
+  # the fourth version digit is optional until all software is on continuous integration and it will become compulsory
+  ERROR=`$SVNLOOK changed $REPO -t $REV |$EGREP "^A.+?/([a-z0-9_]+)/tags/\1-[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?-(dev|rc[0-9]+|final)/.*$" |$WC -l`
+  if [ $ERROR -eq 0 ]
+  then
+    echo "Tag isn't in the correct format: {project}/tags/{project}-{major}.{minor}.{bugfix}-(dev|rc[0-9]+|final). Check that the tag is lowercase, the version number is correctly formatted and that the project name in the tag matches the project name." 1>&2
+    exit 1
+  fi
+  # prevent creation of a final tag if any references are dev or rc tags
+  # this will pick up only the creation of a tag and not changes to a tag
+  PARENT=`$SVNLOOK changed $REPO -t $REV |$EGREP "^A.+/tags/.+-[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?-final/$" |$AWK '{print $2}'`
+  if [ "$PARENT" != '' ]
+  then
+    IFS=$'\n'
+    # potential improvement for which svn doesn't seem to cater is to include only directories
+    # iterate over all items in the tree, given the parent
+    for ITEM in $($SVNLOOK tree --full-paths $REPO -t $REV $PARENT);
+    do
+      # first check whether any externals are defined
+      HAS_EXTERNALS=`$SVNLOOK proplist $REPO -t $REV $ITEM |$GREP svn:externals |$WC -l`
+      if [ $HAS_EXTERNALS -ne 0 ]
+      then
+        # check for the existence of dev or rc tags
+        SVN_EXTERNALS=`$SVNLOOK propget -t $REV $REPO svn:externals $ITEM`
+        HAS_DEV_OR_RC_EXTERNALS=`echo "$SVN_EXTERNALS" |$EGREP ".+-(dev|rc[0-9]+).*" |$WC -l`
+        if [ $HAS_DEV_OR_RC_EXTERNALS -ne 0 ]
+        then
+          echo "Final tags must only externalise other final tags. Invalid externals on $ITEM: " 1>&2
+          echo "$SVN_EXTERNALS" 1>&2
+          exit 1
+        fi # end HAS_DEV_OR_RC_EXTERNALS
+      fi # end HAS_EXTERNALS
+    done # end loop
+  fi # and external checks
+fi # end tag checks
+
+exit 0
+
+# TODO:
+# Check trunk/lib (vs. trunk/libs)
+# Use repeat groups to check for project name in tag: \1
+# Enforce bug tracker issue number [a-zA-Z]+-[0-9]+ (e.g. ABC-123)
