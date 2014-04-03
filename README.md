@@ -19,6 +19,7 @@ The need for many of the features of this script becomes redundant if you have a
 Please fork to taste! 
 
 # See also
+* [Semantic Versioning 2.0.0](http://semver.org/)
 * [Subversion Repository Hook Reference - pre-commit hook](http://svnbook.red-bean.com/en/1.8/svn.ref.reposhooks.pre-commit.html)
 * [Customizing Git - Git Hooks](http://git-scm.com/book/en/Customizing-Git-Git-Hooks)
 * [Mercurial: The Definitive Guide - Handling repository events with hooks](http://hgbook.red-bean.com/read/handling-repository-events-with-hooks.html)
